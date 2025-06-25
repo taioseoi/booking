@@ -2,11 +2,8 @@ from flask import Flask
 from routes.auth import auth_bp
 from routes.booking import booking_bp
 from routes.linebot import linebot_bp
-from routes.payments import payment_bp  # <--- เพิ่มตรงนี้
+from routes.payments import payment_bp
 from routes.upload_slip_ai import ai_upload_bp
-
-app.register_blueprint(ai_upload_bp)
-
 from config import SECRET_KEY
 
 def create_app():
@@ -17,7 +14,8 @@ def create_app():
     app.register_blueprint(auth_bp, url_prefix='/auth')
     app.register_blueprint(booking_bp, url_prefix='/booking')
     app.register_blueprint(linebot_bp, url_prefix='/linebot')
-    app.register_blueprint(payment_bp, url_prefix='/payment') # <--- เพิ่มตรงนี้
+    app.register_blueprint(payment_bp, url_prefix='/payment')
+    app.register_blueprint(ai_upload_bp, url_prefix='/ai_upload')
 
     @app.route('/')
     def index():
