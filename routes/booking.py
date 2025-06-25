@@ -1,0 +1,150 @@
+from flask import Blueprint, render_template, session, request, redirect, jsonify
+from core.line_utils import push_flex_line, get_line_auth_url
+from core.flex_receipt import build_receipt_flex
+from core.utils import format_thai_date
+from config import DATABASE, PRICE_PER_ROOM
+import sqlite3
+
+booking_bp = Blueprint("booking", __name__)
+
+@booking_bp.route('/datepicker')
+def datepicker():
+    room = request.args.get("room")
+    if not room or room == "None":
+        return "กรุณาเข้าผ่านลิงก์ที่ถูกต้อง (room parameter หาย)", 400
+    if "line_profile" not in session:
+        login_url = get_line_auth_url(room)
+        return redirect(login_url)
+    return render_template('custom_datepicker.html', room=room, profile=session["line_profile"])
+
+@booking_bp.route("/book", methods=["POST"])
+def book():
+    print("--- /book called ---")
+    print("SESSION:", session)
+    try:
+        data = request.get_json()
+        print("DATA:", data)
+        if "line_profile" not in session:
+            print("NO line_profile in session")
+            return jsonify({"success": False, "msg": "กรุณาเข้าสู่ระบบด้วย LINE"}), 400
+        user_id = session["line_profile"]["userId"]
+        room = data.get("room")
+        if not room or room == "None":
+            return jsonify({"success": False, "msg": "ไม่ได้เลือกห้อง"}), 400
+        date = data.get("date")
+        time = data.get("time")
+        print(f"room: {room}, date: {date}, time: {time}")
+        if not room or not date or not time:
+            print("ข้อมูลไม่ครบ")
+            return jsonify({"success": False, "msg": "ข้อมูลไม่ครบ กรุณาเลือกห้อง วัน และเวลา"}), 400
+
+        conn = sqlite3.connect(DATABASE)
+        c = conn.cursor()
+        c.execute(
+            "SELECT * FROM bookings WHERE room=? AND date=? AND time=?",
+            (room, date, time)
+        )
+        if c.fetchone():
+            conn.close()
+            print("ห้องนี้ถูกจองในวันและเวลาดังกล่าวแล้ว")
+            return jsonify({"success": False, "msg": "ห้องนี้ถูกจองในวันและเวลาดังกล่าวแล้ว"}), 400
+        c.execute(
+            "INSERT INTO bookings (line_user_id, room, date, time, payment_status) VALUES (?, ?, ?, ?, ?)",
+            (user_id, room, date, time, 'pending')
+        )
+        booking_id = c.lastrowid
+        conn.commit()
+        conn.close()
+
+
+        flex_wait_slip = {
+        "type": "bubble",
+        "body": {
+            "type": "box",
+            "layout": "vertical",
+            "contents": [
+                {"type": "text", "text": f"จองห้อง {room} สำเร็จ", "weight": "bold", "size": "lg"},
+                {"type": "text", "text": "กรุณาอัปโหลดสลิปโอนเงินเพื่อยืนยันการจอง", "wrap": True, "margin": "md"},
+            ]
+        },
+        "footer": {
+            "type": "box",
+            "layout": "vertical",
+            "spacing": "sm",
+            "contents": [
+                {
+                    "type": "button",
+                    "action": {
+                        "type": "uri",
+                        "label": "อัปโหลดสลิป",
+                        "uri": f"https://8958-2405-9800-b660-dee1-15ef-b331-5bf4-4f49.ngrok-free.app/payment/upload_slip?booking_id={booking_id}"
+                    },
+                    "style": "primary"
+                }
+            ]
+        }
+    }
+        # ไม่ต้อง build_receipt_flex
+        push_flex_line(user_id, flex_wait_slip)
+
+        print(f"จองห้อง {room} สำเร็จ! แจ้งรออัปโหลดสลิป")
+        return jsonify({"success": True, "msg": f"คุณกำลังจองห้อง {room} สำเร็จ!"})
+    except Exception as e:
+        print("Exception in /book:", e)
+        import traceback; traceback.print_exc()
+        return jsonify({"success": False, "msg": "เกิดข้อผิดพลาด (server)"}), 500
+
+@booking_bp.route("/mybookings")
+def mybookings():
+    print("SESSION:", session)
+    if "line_profile" not in session:
+        print("NO line_profile in session")
+        return jsonify([])
+    user_id = session["line_profile"]["userId"]
+    conn = sqlite3.connect(DATABASE)
+    c = conn.cursor()
+    c.execute(
+        "SELECT id, room, date, time FROM bookings WHERE line_user_id=? ORDER BY date DESC, time DESC",
+        (user_id,)
+    )
+    rows = c.fetchall()
+    conn.close()
+    bookings = [{"id": r, "room": d, "date": t, "time": u} for r, d, t, u in rows]
+    return jsonify(bookings)
+
+@booking_bp.route("/cancel_booking", methods=["POST"])
+def cancel_booking():
+    try:
+        data = request.get_json()
+        booking_id = data.get("booking_id")
+        if not booking_id:
+            return jsonify({"success": False, "msg": "ไม่พบข้อมูล booking_id"}), 400
+
+        if "line_profile" not in session:
+            return jsonify({"success": False, "msg": "กรุณาเข้าสู่ระบบ"}), 400
+        user_id = session["line_profile"]["userId"]
+
+        conn = sqlite3.connect(DATABASE)
+        c = conn.cursor()
+        c.execute(
+            "SELECT * FROM bookings WHERE id=? AND line_user_id=?",
+            (booking_id, user_id)
+        )
+        booking = c.fetchone()
+        if not booking:
+            conn.close()
+            return jsonify({"success": False, "msg": "ไม่พบข้อมูลการจองนี้"}), 404
+
+        c.execute("DELETE FROM bookings WHERE id=?", (booking_id,))
+        conn.commit()
+        conn.close()
+        return jsonify({"success": True, "msg": "ยกเลิกการจองสำเร็จ"})
+    except Exception as e:
+        print("Exception in /cancel_booking:", e)
+        import traceback; traceback.print_exc()
+        return jsonify({"success": False, "msg": "เกิดข้อผิดพลาด (server)"}), 500
+
+@booking_bp.route("/your_booking_page")
+def your_booking_page():
+    if "line_profile" not in session:
+        return redirect(get_line_auth_url())

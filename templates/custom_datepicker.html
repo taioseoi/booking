@@ -1,0 +1,624 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai+Looped:wght@100;200;300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&icon_names=date_range" />
+  <meta charset="UTF-8">
+  <title>Custom Beige Datepicker</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body {
+        /* พื้นหลังเป็นรูปภาพ */
+        background: url('/static/webbg.png') no-repeat center center fixed;
+        background-size: cover;
+        min-height: 100vh;
+        margin: 0;
+        font-family: 'IBM Plex Sans Thai Looped', sans-serif;
+        .logo {
+          font-family: 'date_range', cursive;
+          font-size: 2.2em;
+          color: #8b7355;
+          letter-spacing: 2px;
+          margin-bottom: 18px;
+        }
+        /* สำหรับ fallback เฉยๆ */
+        background-color: #f7f1e5;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      
+      }
+      .calendar-wrapper {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+      }
+      .profile-header {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          margin-bottom: 14px;
+          background: rgba(255,243,233,0.75);
+          padding: 12px 18px 8px 18px;
+          border-radius: 18px;
+          box-shadow: 0 2px 16px #e9dbc52a;
+          backdrop-filter: blur(4px);
+        }
+      .timepicker-wrapper {
+        position: relative;
+        margin-bottom: 18px;
+        margin-top: 0;
+        width: 220px;
+      }
+      #timepicker-input {
+        width: 100%;
+        padding: 10px 12px;
+        border-radius: 8px;
+        border: 1.5px solid #e9dbc5;
+        font-size: 1.1em;
+        outline: none;
+        color: #7b6651;
+        background: rgba(255,255,255,0.6);
+        box-sizing: border-box;
+        transition: border 0.2s, background 0.2s;
+        backdrop-filter: blur(4px);
+        -webkit-backdrop-filter: blur(4px);
+        margin-bottom: 0;
+      }
+      #timepicker-input:focus {
+        border: 2px solid #c7b198;
+        background: rgba(255,255,255,0.8);
+      }
+      
+      .timepicker-popup {
+        position: absolute;
+      left: 0;
+      top: 44px;
+      width: 100%;
+      background: rgba(255,243,233,0.95);
+      box-shadow: 0 2px 10px #e9dbc540;
+      border-radius: 12px;
+      padding: 10px 0;
+      display: none;
+      z-index: 100;
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      }
+      .timepicker-popup .time-list {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        justify-content: center;
+        max-height: 160px;
+        overflow-y: auto;
+      }
+      .timepicker-popup .time-btn {
+        background: #e9dbc5;
+        color: #8b7355;
+        border: none;
+        border-radius: 6px;
+        padding: 7px 15px;
+        font-size: 1.07em;
+        cursor: pointer;
+        transition: background 0.18s, color 0.18s;
+        margin: 3px 0;
+      }
+      .timepicker-popup .time-btn.selected,
+      .timepicker-popup .time-btn:hover {
+        background: #f7f1e5;
+        color: #8b7355;
+        font-weight: bold;
+        box-shadow: 0 2px 8px #e9dbc54c;
+      }
+      /* กล่องปฏิทินใส แต่เบลอพื้นหลัง */
+      .calendar {
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        z-index: 2000;
+        width: 340px;
+        background: rgba(255,243,233,0.95);
+        border-radius: 18px;
+        box-shadow: 0 6px 24px #e9dbc5cc;
+        padding: 24px 18px 18px 18px;
+        backdrop-filter: blur(8px);
+        -webkit-backdrop-filter: blur(8px);
+        display: none;
+      }
+      .calendar header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 12px;
+      }
+      .calendar header button {
+        background: #e9dbc5;
+        border: none;
+        color: #8b7355;
+        font-size: 1.4em;
+        padding: 0 10px;
+        border-radius: 6px;
+        cursor: pointer;
+        transition: background 0.2s;
+      }
+      .calendar header button:hover {
+        background: #c7b198;
+      }
+      .calendar header h2 {
+        font-size: 1.4em;
+        color: #8b7355;
+        margin: 0 10px;
+        font-weight: 700;
+        letter-spacing: 1px;
+      }
+      .calendar .days {
+        display: grid;
+        grid-template-columns: repeat(7, 1fr);
+        gap: 5px;
+      }
+      .calendar .day {
+        color: #a4907c;
+        text-align: center;
+        margin-bottom: 6px;
+        font-weight: 600;
+        padding: 6px 0;
+        background: transparent;
+        border-radius: 6px;
+        font-size: 1.03em;
+      }
+      .calendar .dates {
+        display: grid;
+        grid-template-columns: repeat(7, 1fr);
+        gap: 5px;
+      }
+      .calendar .date {
+        text-align: center;
+        cursor: pointer;
+        padding: 10px 0;
+        border-radius: 7px;
+        font-size: 1.07em;
+        background: transparent;
+        color: #8b7355;
+        transition: background 0.15s, color 0.15s, border 0.15s;
+        border: 2px solid transparent;
+      }
+      .calendar .date:hover:not(.selected):not(.today) {
+        background: #e9dbc5bb;
+        color: #8b7355;
+      }
+      .calendar .date.selected {
+        border: 2px solid #e9dbc5;
+        background: #f7f1e5;
+        color: #8b7355;
+        font-weight: bold;
+        box-shadow: 0 2px 10px #e9dbc540;
+      }
+      .calendar .date.today {
+        border: 2px solid #c7b198;
+        background: #f7f1e5;
+        color: #c7b198;
+        font-weight: 600;
+      }
+      .calendar .date.disabled {
+        color: #e9dbc5aa;
+        cursor: not-allowed;
+      }
+      /* Responsive */
+      @media (max-width: 400px) {
+        .calendar {
+          width: 98vw;
+          padding: 12px 2vw;
+        }
+      }
+      .datepicker-wrapper {
+        position: relative;
+        display: inline-block;
+      }
+
+      /* กล่อง input ใส */
+      #datepicker-input {
+        width: 220px;
+        padding: 10px 12px;
+        border-radius: 8px;
+        border: 1.5px solid #e9dbc5;
+        font-size: 1.1em;
+        margin-bottom: 18px;
+        outline: none;
+        color: #7b6651;
+        background: rgba(255,255,255,0.6);
+        box-sizing: border-box;
+        transition: border 0.2s, background 0.2s;
+        backdrop-filter: blur(4px);
+        -webkit-backdrop-filter: blur(4px);
+      }
+      #datepicker-input:focus {
+        border: 2px solid #c7b198;
+        background: rgba(255,255,255,0.8);
+      }
+      /* หัวข้อชื่อห้อง */
+      .room-title {
+        color: #11100f;
+        margin-bottom: 12px;
+        background: rgba(255, 255, 255, 0.4);
+        padding: 8px 18px;
+        border-radius: 12px;
+        font-weight:Thin 100 ;
+        box-shadow: 0 1px 6px #e9dbc540;
+        backdrop-filter: blur(4px);
+        -webkit-backdrop-filter: blur(4px);
+        font-size: 1.15em;
+      }
+      .simple-btn {
+        background: #e9dbc5;
+        color: #8b7355;
+        border: none;
+        border-radius: 25px;
+        padding: 12px 36px;
+        font-size: 1.1em;
+        font-family: 'IBM Plex Sans Thai Looped', sans-serif;
+        font-weight: Light 300;
+        cursor: pointer;
+        box-shadow: 0 2px 10px #e9dbc540;
+        transition: background 0.2s, box-shadow 0.2s, transform 0.1s;
+        outline: none;
+        margin-top: 10px;
+      }
+      .simple-btn:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+      .simple-btn:hover:not(:disabled),
+      .simple-btn:focus:not(:disabled) {
+        background: #f7f1e5;
+        box-shadow: 0 4px 18px #e9dbc560;
+        transform: translateY(-2px) scale(1.03);
+      }
+
+      .liquid-button {
+      position: relative;
+      display: inline-block;
+      cursor: pointer;
+      outline: none;
+      border: none;
+      background: transparent;
+      margin: 20px auto;
+    }
+    .liquid-button svg {
+      display: block;
+      width: 220px;
+      height: 60px;
+    }
+    .calendar-overlay {
+      display: none;
+      position: fixed;
+      z-index: 1999;
+      left: 0; top: 0; width: 100vw; height: 100vh;
+      background: rgba(0,0,0,0.18);
+      backdrop-filter: blur(2px);
+    }
+    </style>
+  </head>
+  <body>
+    <div class="profile-header" id="profile-header" style="display:none;">
+      <img id="profile-pic" src="" style="width:52px;height:52px;border-radius:50%;box-shadow:0 2px 8px #e9dbc53a;margin-bottom:8px;">
+      <div id="profile-name" style="color:#7b6651;font-size:1.11em;font-weight:600;margin-bottom:12px;"></div>
+    </div>
+    <div class="calendar-wrapper">
+      {% if room %}
+      <h2 class="room-title">🗓️ คุณกำลังจองห้อง: {{ room }}</h2>
+      {% endif %}
+      <div class="datepicker-wrapper">
+        <input type="text" id="datepicker-input" placeholder="เลือกวันที่... 👇🏻" readonly>
+      </div>
+      <div class="calendar-overlay" id="calendar-overlay"></div>
+      <div class="calendar" id="calendar"></div>
+      <div class="timepicker-wrapper">
+        <input type="text" id="timepicker-input" placeholder="เลือกเวลา... ⏰" readonly>
+        <div class="timepicker-popup" id="timepicker-popup">
+          <div class="time-list" id="time-list"></div>
+        </div>
+      </div>
+      <button id="book-btn" class="simple-btn" disabled>ยืนยันการจอง</button>
+      <div id="msg"></div>
+      <div id="history-section">
+        <h3 style="margin:24px 0 10px 0;color:#ffffff;">ประวัติการจองของคุณ</h3>
+        <div id="booking-history"></div>
+      </div>
+    </div>
+    
+  <script>
+    const userId = "{{ profile.userId|default('') }}";
+  if (!userId) {
+    window.location.href = "/logout"; // หรือ redirect ไป login
+  }
+window.addEventListener('DOMContentLoaded', function() {
+  const calendarEl = document.getElementById('calendar');
+  const overlayEl = document.getElementById('calendar-overlay');
+  const inputEl = document.getElementById('datepicker-input');
+  const bookBtn = document.getElementById("book-btn");
+  const msgEl = document.getElementById("msg");
+  const timeInput = document.getElementById('timepicker-input');
+  var room = "{{ room|default('') }}";
+  if (room === "None" || !room) {
+    alert("กรุณาเข้าผ่านลิงก์ที่ถูกต้อง หรือเลือกห้องใหม่อีกครั้ง");}
+  const userId = "{{ profile.userId }}";
+  let today = new Date();
+  let selectedDate = null;
+  let currentMonth = today.getMonth();
+  let currentYear = today.getFullYear();
+
+  function formatThaiDate(isoDate) {
+    const mNames = ["", "ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.",
+      "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
+    const d = new Date(isoDate);
+    if (isNaN(d)) return isoDate;
+    return `${d.getDate()} ${mNames[d.getMonth()+1]} ${d.getFullYear()+543}`;
+  }
+
+  function loadBookingHistory() {
+    const historyEl = document.getElementById('booking-history');
+    const historySection = document.getElementById('history-section');
+    historyEl.innerHTML = "กำลังโหลด...";
+    fetch("/booking/mybookings")
+      .then(r => r.json())
+      .then(list => {
+        if (!list.length) {
+          historySection.style.display = "none";
+          return;
+        }
+        historySection.style.display = "";
+        historyEl.innerHTML = "";
+        list.forEach(b => {
+          const div = document.createElement('div');
+          div.className = "booking-item";
+          div.style = "background:rgba(255,255,255,0.7);margin-bottom:12px;padding:12px 18px;border-radius:10px;box-shadow:0 1px 8px #e9dbc540;display:flex;align-items:center;justify-content:space-between;";
+          div.innerHTML = `
+            <div>
+              <b>ห้อง:</b> ${b.room} <b>วันที่:</b> ${formatThaiDate(b.date)} <b>เวลา:</b> ${b.time}
+            </div>
+            <button class="simple-btn" style="padding:7px 18px;font-size:1em;margin-left:12px;background:#e57373;color:#fff;" onclick="cancelBooking(${b.id})">ยกเลิก</button>
+          `;
+          historyEl.appendChild(div);
+        });
+      });
+  }
+  window.loadBookingHistory = loadBookingHistory;
+
+  // เรียกทันทีที่โหลดหน้า
+  loadBookingHistory();
+
+  function renderCalendar(month, year) {
+    const monthNames = ['มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน', 'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'];
+    calendarEl.innerHTML = '';
+
+    // Header
+    const header = document.createElement('header');
+    const prevBtn = document.createElement('button');
+    prevBtn.textContent = '<';
+    prevBtn.onclick = () => { changeMonth(-1); };
+
+    const title = document.createElement('h2');
+    title.textContent = `${monthNames[month]} ${year}`;
+
+    const nextBtn = document.createElement('button');
+    nextBtn.textContent = '>';
+    nextBtn.onclick = () => { changeMonth(1); };
+
+    header.appendChild(prevBtn);
+    header.appendChild(title);
+    header.appendChild(nextBtn);
+    calendarEl.appendChild(header);
+
+    // Days of week
+    const daysRow = document.createElement('div');
+    daysRow.className = 'days';
+    const daysShort = ['อา', 'จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส'];
+    daysShort.forEach(d => {
+      const day = document.createElement('div');
+      day.className = 'day';
+      day.textContent = d;
+      daysRow.appendChild(day);
+    });
+    calendarEl.appendChild(daysRow);
+
+    // Dates
+    const datesGrid = document.createElement('div');
+    datesGrid.className = 'dates';
+
+    let firstDay = new Date(year, month, 1).getDay();
+    let lastDate = new Date(year, month + 1, 0).getDate();
+
+    // Fill blanks before 1st
+    for (let i = 0; i < firstDay; i++) {
+      const blank = document.createElement('div');
+      blank.className = 'date disabled';
+      datesGrid.appendChild(blank);
+    }
+
+    for (let d = 1; d <= lastDate; d++) {
+      const dateCell = document.createElement('div');
+      dateCell.className = 'date';
+      dateCell.textContent = d;
+
+      // Today
+      const isToday = (
+        d === today.getDate() &&
+        month === today.getMonth() &&
+        year === today.getFullYear()
+      );
+      if (isToday) dateCell.classList.add('today');
+
+      // Selected
+      if (
+        selectedDate &&
+        d === selectedDate.getDate() &&
+        month === selectedDate.getMonth() &&
+        year === selectedDate.getFullYear()
+      ) {
+        dateCell.classList.add('selected');
+      }
+
+      dateCell.onclick = () => {
+        selectedDate = new Date(year, month, d);
+        inputEl.value = selectedDate.toISOString().slice(0,10);
+        calendarEl.style.display = 'none';
+        if (overlayEl) overlayEl.style.display = 'none';
+        inputEl.dispatchEvent(new Event('input'));
+      };
+
+      datesGrid.appendChild(dateCell);
+    }
+    calendarEl.appendChild(datesGrid);
+  }
+
+  function updateBookBtn() {
+  bookBtn.disabled = !(room && inputEl.value && timeInput.value);
+}
+  inputEl.addEventListener('input', updateBookBtn);
+  inputEl.addEventListener('change', updateBookBtn);
+  timeInput.addEventListener('input', updateBookBtn);
+  timeInput.addEventListener('change', updateBookBtn);
+  bookBtn.addEventListener('click', function() {
+  console.log("จองห้อง:", room, inputEl.value, timeInput.value, userId); // log ตรงนี้!
+  if (!room || !inputEl.value || !timeInput.value) {
+    msgEl.textContent = "กรุณาเลือกห้อง วัน และเวลาให้ครบ";
+    return;
+  }
+  bookBtn.disabled = true;
+  msgEl.textContent = "กำลังจอง...";
+
+  fetch("/booking/book", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    credentials: "include",
+    body: JSON.stringify({
+      room: room,
+      date: inputEl.value,
+      time: timeInput.value,
+      userId: userId
+    })
+  })
+  .then(r => r.json())
+  .then(res => {
+    msgEl.textContent = res.msg;
+    if(res.success) {
+      bookBtn.disabled = true;
+      bookBtn.textContent = "จองสำเร็จ";
+    } else {
+      bookBtn.disabled = false;
+    }
+  })
+  .catch(err => {
+    msgEl.textContent = "เกิดข้อผิดพลาดในการจอง";
+    bookBtn.disabled = false;
+  });
+});
+
+  function changeMonth(delta) {
+    currentMonth += delta;
+    if (currentMonth < 0) {
+      currentMonth = 11;
+      currentYear--;
+    } else if (currentMonth > 11) {
+      currentMonth = 0;
+      currentYear++;
+    }
+    renderCalendar(currentMonth, currentYear);
+  }
+
+  function showCalendar() {
+    calendarEl.style.display = 'block';
+    if (overlayEl) overlayEl.style.display = 'block';
+  }
+
+  inputEl.addEventListener('focus', showCalendar);
+  inputEl.addEventListener('click', showCalendar);
+
+  // ปิด calendar เมื่อคลิกนอก calendar
+  document.addEventListener('mousedown', (e) => {
+    if (
+      calendarEl.style.display === 'block' &&
+      !calendarEl.contains(e.target) &&
+      e.target !== inputEl
+    ) {
+      calendarEl.style.display = 'none';
+      if (overlayEl) overlayEl.style.display = 'none';
+    }
+  });
+
+  renderCalendar(currentMonth, currentYear);
+  calendarEl.style.display = 'none';
+  updateBookBtn();
+  
+  function cancelBooking(bookingId) {
+  fetch("/cancel_booking", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ booking_id: bookingId })
+  })
+    .then(res => res.json())
+    .then(res => {
+      console.log(res);
+      if (res.success) {
+        alert("ยกเลิกการจองสำเร็จ");
+        window.location.reload();
+      } else {
+        alert(res.msg);
+      }
+    });
+}
+  // --- Timepicker ---
+  const popup = document.getElementById('timepicker-popup');
+  const timeList = document.getElementById('time-list');
+
+  function generateTimeList(intervalMinutes=60, startHour=0, endHour=23) {
+    let times = [];
+    for (let h = startHour; h <= endHour; h++) {
+      times.push(
+        String(h).padStart(2, '0') + ':00'
+      );
+    }
+    return times;
+  }
+
+  function renderTimeButtons(times, selected) {
+    timeList.innerHTML = '';
+    times.forEach(t => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'time-btn' + (t === selected ? ' selected' : '');
+      btn.textContent = t;
+      btn.onclick = () => {
+        timeInput.value = t;
+        popup.style.display = 'none';
+        timeInput.dispatchEvent(new Event('input'));
+      };
+      timeList.appendChild(btn);
+    });
+  }
+
+  const times = generateTimeList();
+  renderTimeButtons(times);
+
+  timeInput.addEventListener('focus', () => {
+    renderTimeButtons(times, timeInput.value);
+    popup.style.display = 'block';
+  });
+  timeInput.addEventListener('click', () => {
+    renderTimeButtons(times, timeInput.value);
+    popup.style.display = 'block';
+  });
+
+  document.addEventListener('mousedown', (e) => {
+    if (!popup.contains(e.target) && e.target !== timeInput) {
+      popup.style.display = 'none';
+    }
+  });
+});
+</script>
+</body>
+</html>

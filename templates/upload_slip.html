@@ -1,0 +1,14 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>อัปโหลดสลิป</title>
+</head>
+<body>
+    <h2>อัปโหลดสลิปโอนเงินสำหรับ Booking #{{ booking_id }}</h2>
+    <form method="post" enctype="multipart/form-data">
+        <input type="hidden" name="booking_id" value="{{ booking_id }}">
+        <input type="file" name="slip" accept="image/*" required>
+        <button type="submit">อัปโหลด</button>
+    </form>
+</body>
+</html>

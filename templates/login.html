@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Login with LINE</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+Thai:wght@100..900&display=swap" rel="stylesheet">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Sarabun:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css?family=Montserrat:700&display=swap" rel="stylesheet">
+  <style>
+    body {
+      background: #f6f1ea;
+      min-height: 100vh;
+      margin: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Sarabun', sans-serif;
+      position: relative;
+      overflow: auto;
+    }
+    .circle-bg {
+      position: absolute;
+      border-radius: 50%;
+      background: #e7dfd2;
+      opacity: 0.37;
+      z-index: 1;
+    }
+    .circle1 {
+      width: 180px; height: 180px;
+      left: 8vw; top: 5vw;
+    }
+    .circle2 {
+      width: 110px; height: 110px;
+      right: 8vw; bottom: 8vw;
+    }
+    .login-container {
+      position: relative;
+      z-index: 2;
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+      min-width: 320px;
+      width: 95vw;
+      max-width: 510px;
+    }
+    .login-card {
+      background: rgba(253, 247, 235, 0.97);
+      border-radius: 22px;
+      box-shadow: 0 12px 48px 0 rgba(156, 142, 126, 0.17);
+      padding: 2.3rem 1.3rem 2.2rem 1.3rem;
+      min-width: 0;
+      width: 100%;
+      position: relative;
+      text-align: left;
+      color: #5e4a2d;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      overflow: visible;
+    }
+    .login-title {
+      font-size: 1.5rem;
+      font-family: 'Sarabun', sans-serif;
+      font-weight: Light 300;
+      margin: 1.2rem 0 1.4rem 0;
+      letter-spacing: 1.2px;
+      color: #7d6b52;
+      text-shadow: 0 2px 12px #e7dfd2;
+      width: 100%;
+      text-align: left;
+    }
+    .login-btn {
+      width: 100%;
+      background: #bca178;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-size: 1.13rem;
+      font-family: inherit;
+      font-weight: 700;
+      padding: 1.1rem 0;
+      cursor: pointer;
+      margin-top: 2rem;
+      margin-bottom: 1.2rem;
+      letter-spacing: 1.1px;
+      transition: background 0.2s;
+      box-shadow: 0 2px 14px rgba(156,142,126,.13);
+      text-align: center;
+      display: block;
+    }
+    .login-btn:hover {
+      background: #9d875e;
+    }
+    .login-3d {
+      position: absolute;
+      right: -60px;
+      top: -48px;
+      width: 230px;
+      max-width: 60vw;
+      min-width: 100px;
+      height: auto;
+      z-index: 3;
+      pointer-events: none;
+      user-select: none;
+      object-fit: contain;
+      
+      background: none;
+    }
+    @media (max-width: 600px) {
+      .login-container {
+        min-width: unset;
+        width: 98vw;
+        max-width: 98vw;
+      }
+      .login-card {
+        padding: 1.1rem 0.2rem 1.1rem 0.2rem;
+      }
+      .login-title {
+        font-size: 1.05rem;
+        margin-bottom: 1rem;
+        margin-top: 0.8rem;
+      }
+      .login-3d {
+        position: static;
+        display: block;
+        margin: 0 auto 0.8rem auto;
+        width: 60vw;
+        min-width: 80px;
+        max-width: 94vw;
+        top: unset;
+        right: unset;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="circle-bg circle1"></div>
+  <div class="circle-bg circle2"></div>
+  <div class="login-container">
+    <div class="login-card">
+      <img class="login-3d" src="/static/login.png" alt="3D Login" />
+      <div class="login-title">กรุณาเข้าสู่ระบบ🧑‍💻</div>
+      <a href="{{ line_login_url }}" class="login-btn">LOG IN</a>
+    </div>
+  </div>
+</body>
+</html>
