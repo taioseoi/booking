@@ -5,7 +5,8 @@ from flask import Blueprint, request, jsonify, render_template
 from werkzeug.utils import secure_filename
 from PIL import Image
 import pytesseract
-
+from core.line_utils import push_flex_line
+from core.flex_receipt import build_receipt_flex
 payment_bp = Blueprint('payment', __name__)
 UPLOAD_FOLDER = "uploads"
 PROMPTPAY_PHONE = "0986619426"
@@ -77,9 +78,6 @@ def upload_slip():
         file.save(save_path)
 
         amount, old_slip = get_booking_amount_and_path(booking_id)
-        # ถ้าไม่มี amount (กรณี schema เดิม) ให้ข้าม validation ยอด
-        # หรือกำหนด amount เป็น None ก็ได้
-        # ถ้าไม่มี column amount ให้ใช้ amount = None
 
         # OCR
         try:
@@ -90,6 +88,19 @@ def upload_slip():
 
         if is_slip_valid(ocr_text, PROMPTPAY_PHONE, amount):
             update_booking_payment(booking_id, 'paid', save_path)
-            return jsonify({"success": True, "msg": "ตรวจสอบสลิปผ่าน อัปเดตสถานะเรียบร้อย!", "ocr_text": ocr_text})
+
+            # *** เพิ่มส่วนนี้: ดึงข้อมูล booking เพื่อสร้างใบเสร็จ ***
+            conn = sqlite3.connect(DATABASE)
+            cur = conn.cursor()
+            cur.execute("SELECT room, date, time, line_user_id FROM bookings WHERE id=?", (booking_id,))
+            row = cur.fetchone()
+            conn.close()
+            if row:
+                room, date, time, line_user_id = row
+                price = amount or 0  # ถ้ามี amount
+                flex = build_receipt_flex(room, date, time, price, booking_id)
+                push_flex_line(line_user_id, flex)  # ส่ง Flex Receipt ไปที่ LINE OA
+
+            return render_template('upload_success.html')
         else:
             return jsonify({"success": False, "msg": "สลิปไม่ถูกต้อง กรุณาตรวจสอบและอัปโหลดใหม่", "ocr_text": ocr_text}), 400

@@ -1,11 +1,12 @@
 from flask import Blueprint, request, abort
 from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError
-from linebot.models import MessageEvent, TextMessage, FlexSendMessage, TextSendMessage, PostbackEvent
+from linebot.models import MessageEvent, TextMessage, FlexSendMessage, TextSendMessage, PostbackEvent, ImageSendMessage
 from core.flex_utils import build_room_booking_flex, booking_history_flex
 from core.flex_receipt import build_receipt_flex
 from config import LINE_CHANNEL_ACCESS_TOKEN, LINE_CHANNEL_SECRET, BASE_URL, DATABASE
 import sqlite3
+from routes.booking import send_qr_to_user
 
 linebot_bp = Blueprint("linebot", __name__)
 line_bot_api = LineBotApi(LINE_CHANNEL_ACCESS_TOKEN)
@@ -51,10 +52,10 @@ def handle_message(event):
         print("user_id:", line_user_id)
         conn = sqlite3.connect(DATABASE)
         c = conn.cursor()
-        c.execute("SELECT id, room, date, time FROM bookings WHERE line_user_id=?", (line_user_id,))
+        c.execute("SELECT id, room, date, time, payment_status FROM bookings WHERE line_user_id=?", (line_user_id,))
         rows = c.fetchall()
         print("DB rows:", rows)
-        bookings = [{"id": r, "room": d, "date": t, "time": u} for r, d, t, u in rows]
+        bookings = [{"id": r, "room": d, "date": t, "time": u, "payment_status": s, "user_id": line_user_id} for r, d, t, u, s in rows]
         conn.close()
         if bookings:
             flex = booking_history_flex(bookings)
@@ -69,6 +70,16 @@ def handle_message(event):
             )
         return
 
+    if event.message.text == "ขอ QR":
+        booking_id = 2  # ตัวอย่าง: ดึง booking_id ตาม context จริง
+        user_id = event.source.user_id
+        qr_url = f"https://8958-2405-9800-b660-dee1-15ef-b331-5bf4-4f49.ngrok-free.app/booking/get_qr_image/{booking_id}"
+
+        image_message = ImageSendMessage(
+            original_content_url=qr_url,
+            preview_image_url=qr_url
+        )
+        line_bot_api.reply_message(event.reply_token, image_message)
     # Default/else case
     line_bot_api.reply_message(
         event.reply_token,
@@ -82,6 +93,12 @@ def handle_message(event):
 @handler.add(PostbackEvent)
 def handle_postback(event):
     data = event.postback.data
+    if data == "msg=wait_qr":
+        line_bot_api.reply_message(
+            event.reply_token,
+            TextSendMessage(text="สามารถขอ QR ได้ 1 ชม. ก่อนถึงเวลาเข้าห้อง")
+        )
+        return
     if data.startswith("action=cancel_booking"):
         params = dict(x.split("=") for x in data.split("&"))
         booking_id = params.get("id")
@@ -107,6 +124,10 @@ def handle_postback(event):
             event.reply_token,
             TextSendMessage(text=msg)
         )
+    if data.startswith("show_qr|"):
+        booking_id = int(data.split("|")[1])
+        user_id = event.source.user_id
+        send_qr_to_user(user_id, booking_id)
 
 @linebot_bp.route("/callback", methods=['POST'])
 def callback():

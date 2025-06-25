@@ -464,7 +464,10 @@ window.addEventListener('DOMContentLoaded', function() {
 
       dateCell.onclick = () => {
         selectedDate = new Date(year, month, d);
-        inputEl.value = selectedDate.toISOString().slice(0,10);
+        const yyyy = selectedDate.getFullYear();
+        const mm = String(selectedDate.getMonth() + 1).padStart(2, '0');
+        const dd = String(selectedDate.getDate()).padStart(2, '0');
+        inputEl.value = `${yyyy}-${mm}-${dd}`;
         calendarEl.style.display = 'none';
         if (overlayEl) overlayEl.style.display = 'none';
         inputEl.dispatchEvent(new Event('input'));

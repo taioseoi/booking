@@ -1,11 +1,31 @@
-from flask import Blueprint, render_template, session, request, redirect, jsonify
+from flask import Blueprint, render_template, session, request, redirect, jsonify, send_file
 from core.line_utils import push_flex_line, get_line_auth_url
 from core.flex_receipt import build_receipt_flex
 from core.utils import format_thai_date
 from config import DATABASE, PRICE_PER_ROOM
 import sqlite3
+import os
+import qrcode
+import io
+from linebot import LineBotApi
+from linebot.models import ImageSendMessage
+
 
 booking_bp = Blueprint("booking", __name__)
+
+def send_qr_to_user(line_user_id, booking_id):
+    qr_url = f"https://8958-2405-9800-b660-dee1-15ef-b331-5bf4-4f49.ngrok-free.app/booking/get_qr_image/{booking_id}"
+    access_token = os.environ.get("LINE_CHANNEL_ACCESS_TOKEN", 'fallback-token')
+    print("DEBUG: LINE TOKEN", access_token)
+    line_bot_api = LineBotApi(access_token)
+    image_message = ImageSendMessage(
+        original_content_url=qr_url,
+        preview_image_url=qr_url
+    )
+    try:
+        line_bot_api.push_message(line_user_id, image_message)
+    except Exception as e:
+        print("Error sending QR to LINE user:", e)
 
 @booking_bp.route('/datepicker')
 def datepicker():
@@ -55,6 +75,7 @@ def book():
         booking_id = c.lastrowid
         conn.commit()
         conn.close()
+        
 
 
         flex_wait_slip = {
@@ -84,6 +105,7 @@ def book():
             ]
         }
     }
+        send_qr_to_user(user_id, booking_id)
         # ไม่ต้อง build_receipt_flex
         push_flex_line(user_id, flex_wait_slip)
 
@@ -148,3 +170,50 @@ def cancel_booking():
 def your_booking_page():
     if "line_profile" not in session:
         return redirect(get_line_auth_url())
+
+@booking_bp.route("/get_qr/<int:booking_id>")
+def get_qr(booking_id):
+    print(f"DEBUG: get_qr called, booking_id={booking_id}")
+    print(f"DEBUG: DATABASE PATH = {DATABASE}")
+    user_id = request.args.get("user_id")
+    print(f"DEBUG: user_id query param = {user_id}")
+    conn = sqlite3.connect(DATABASE)
+    c = conn.cursor()
+    c.execute("SELECT line_user_id, room, date, time, payment_status FROM bookings WHERE id=?", (booking_id,))
+    row = c.fetchone()
+    print(f"DEBUG: DB select row = {row}")
+    conn.close()
+    if not row:
+        print("DEBUG: Booking not found 404")
+        return "ไม่พบ booking", 404
+    line_user_id, room, date, time, payment_status = row
+    if payment_status != "paid":
+        return "ยังไม่ได้ชำระเงิน", 403
+    if user_id and user_id != line_user_id:
+        return "คุณไม่มีสิทธิ์เข้าถึง QR นี้", 403
+    # สร้าง QR code (อาจใส่ข้อมูล booking_id, room, date, time)
+    qr_data = f"BOOKING:{booking_id}|ROOM:{room}|DATE:{date}|TIME:{time}"
+    img = qrcode.make(qr_data)
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    buf.seek(0)
+    return send_file(buf, mimetype="image/png")
+
+@booking_bp.route("/get_qr_image/<int:booking_id>")
+def get_qr_image(booking_id):
+    # ดึงข้อมูล booking เพื่อ encode รายละเอียดเหมือน get_qr
+    conn = sqlite3.connect(DATABASE)
+    c = conn.cursor()
+    c.execute("SELECT room, date, time FROM bookings WHERE id=?", (booking_id,))
+    row = c.fetchone()
+    conn.close()
+    if row:
+        room, date, time = row
+        qr_data = f"BOOKING:{booking_id}|ROOM:{room}|DATE:{date}|TIME:{time}"
+    else:
+        qr_data = f"BOOKING:{booking_id}"
+    img = qrcode.make(qr_data)
+    buf = io.BytesIO()
+    img.save(buf, format='PNG')
+    buf.seek(0)
+    return send_file(buf, mimetype='image/png')

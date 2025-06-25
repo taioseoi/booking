@@ -1,4 +1,8 @@
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
+
+def now_thai():
+    # UTC+7
+    return datetime.now(timezone(timedelta(hours=7)))
 
 def format_thai_date(date_str):
     dt = datetime.strptime(date_str, "%Y-%m-%d")

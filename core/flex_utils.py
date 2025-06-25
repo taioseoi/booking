@@ -1,43 +1,41 @@
-def booking_history_flex(bookings, line_user_id=None):
-    """
-    สร้าง Flex Message Carousel สำหรับประวัติการจองห้อง
-    ปุ่ม 'แสดง QR เปิดห้อง' ใช้ dynamic uri ตาม booking_id และ user_id
-    """
-    from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+from core.utils import now_thai
 
+def booking_history_flex(bookings, line_user_id=None):
     bubbles = []
-    now = datetime.now()
+    now = now_thai()
     for b in bookings:
-        dt_start = datetime.strptime(b["date"] + " " + b["time"], "%Y-%m-%d %H:%M")
+        dt_start = datetime.strptime(b["date"] + " " + b["time"], "%Y-%m-%d %H:%M").replace(tzinfo=timezone(timedelta(hours=7)))
         can_show_qr = (
             b.get("payment_status") == "paid"
             and now >= dt_start - timedelta(hours=1)
             and now <= dt_start
         )
-        user_id = b.get("user_id", line_user_id)  # รับจาก booking dict หรือ argument
+        user_id = b.get("user_id", line_user_id)
         footer_contents = []
         if b.get("payment_status") == "paid":
+            qr_url = f"https://8958-2405-9800-b660-dee1-15ef-b331-5bf4-4f49.ngrok-free.app/booking/get_qr/{b['id']}?user_id={user_id}"
             if can_show_qr:
-                # --- จุดนี้คือ dynamic uri ---
-                qr_url = f"https://yourdomain.com/get_qr/{b['id']}?user_id={user_id}"
+                # ปุ่มเขียว ใช้งานได้
                 footer_contents.append({
                     "type": "button",
-                    "style": "primary",
-                    "color": "#1e5128",
                     "action": {
-                        "type": "uri",
-                        "label": "แสดง QR เปิดห้อง",
-                        "uri": qr_url
+                        "type": "postback",
+                        "label": "แสดง QR",
+                        "data": f"show_qr|{b['id']}"
+                    },
+                    "style": "primary"
                     }
-                })
+                )
             else:
+                # ปุ่มเทา กดไม่ได้ (แต่ขึ้นให้เห็น)
                 footer_contents.append({
                     "type": "button",
                     "style": "secondary",
                     "color": "#cccccc",
                     "action": {
                         "type": "postback",
-                        "label": "ขอ QR ได้ 1 ชม. ก่อนถึงเวลา",
+                        "label": "แสดง QR เปิดห้อง",
                         "data": "msg=wait_qr"
                     },
                     "gravity": "center"
@@ -114,7 +112,6 @@ def booking_history_flex(bookings, line_user_id=None):
         "type": "carousel",
         "contents": bubbles
     }
-
 def build_room_booking_flex(rooms):
     """
     สร้าง Flex Message Carousel สำหรับจองห้องแบบ dynamic
