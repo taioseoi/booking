@@ -69,3 +69,83 @@ def build_receipt_flex(room, date, time, price, booking_id):
         }
       }
     }
+
+
+def booking_history_flex(bookings):
+    """
+    สร้าง Flex Message Carousel สำหรับประวัติการจองห้อง
+    """
+    bubbles = []
+    for b in bookings:
+        bubbles.append({
+            "type": "bubble",
+            "hero": {
+                "type": "image",
+                "url": "https://www.executivecentre.com/_next/image/?url=%2F_next%2Fstatic%2Fmedia%2FplanOverview-mr-meetingRoom.1f2225da.jpg&w=3840&q=75",
+                "size": "full",
+                "aspectRatio": "20:13",
+                "aspectMode": "cover"
+            },
+            "body": {
+                "type": "box",
+                "layout": "vertical",
+                "spacing": "md",
+                "contents": [
+                    {
+                        "type": "text",
+                        "text": "Booking Confirmation",
+                        "wrap": True,
+                        "weight": "bold",
+                        "gravity": "center",
+                        "size": "xl"
+                    },
+                    {
+                        "type": "box",
+                        "layout": "vertical",
+                        "margin": "lg",
+                        "spacing": "sm",
+                        "contents": [
+                            {
+                                "type": "box",
+                                "layout": "baseline",
+                                "spacing": "sm",
+                                "contents": [
+                                    {"type": "text", "text": "Date", "color": "#aaaaaa", "size": "sm", "flex": 1},
+                                    {"type": "text", "text": b["date"] + " " + b["time"], "wrap": True, "size": "sm", "color": "#666666", "flex": 4}
+                                ]
+                            },
+                            {
+                                "type": "box",
+                                "layout": "baseline",
+                                "spacing": "sm",
+                                "contents": [
+                                    {"type": "text", "text": "Room", "color": "#aaaaaa", "size": "sm", "flex": 1},
+                                    {"type": "text", "text": b["room"], "wrap": True, "color": "#666666", "size": "sm", "flex": 4}
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            },
+            "footer": {
+                "type": "box",
+                "layout": "vertical",
+                "spacing": "sm",
+                "contents": [
+                    {
+                        "type": "button",
+                        "style": "primary",
+                        "color": "#e57373",
+                        "action": {
+                            "type": "postback",
+                            "label": "ยกเลิกการจอง",
+                            "data": f"action=cancel_booking&id={b['id']}"
+                        }
+                    }
+                ]
+            }
+        })
+    return {
+        "type": "carousel",
+        "contents": bubbles
+    }

@@ -1,9 +1,58 @@
-def booking_history_flex(bookings):
+def booking_history_flex(bookings, line_user_id=None):
     """
     สร้าง Flex Message Carousel สำหรับประวัติการจองห้อง
+    ปุ่ม 'แสดง QR เปิดห้อง' ใช้ dynamic uri ตาม booking_id และ user_id
     """
+    from datetime import datetime, timedelta
+
     bubbles = []
+    now = datetime.now()
     for b in bookings:
+        dt_start = datetime.strptime(b["date"] + " " + b["time"], "%Y-%m-%d %H:%M")
+        can_show_qr = (
+            b.get("payment_status") == "paid"
+            and now >= dt_start - timedelta(hours=1)
+            and now <= dt_start
+        )
+        user_id = b.get("user_id", line_user_id)  # รับจาก booking dict หรือ argument
+        footer_contents = []
+        if b.get("payment_status") == "paid":
+            if can_show_qr:
+                # --- จุดนี้คือ dynamic uri ---
+                qr_url = f"https://yourdomain.com/get_qr/{b['id']}?user_id={user_id}"
+                footer_contents.append({
+                    "type": "button",
+                    "style": "primary",
+                    "color": "#1e5128",
+                    "action": {
+                        "type": "uri",
+                        "label": "แสดง QR เปิดห้อง",
+                        "uri": qr_url
+                    }
+                })
+            else:
+                footer_contents.append({
+                    "type": "button",
+                    "style": "secondary",
+                    "color": "#cccccc",
+                    "action": {
+                        "type": "postback",
+                        "label": "ขอ QR ได้ 1 ชม. ก่อนถึงเวลา",
+                        "data": "msg=wait_qr"
+                    },
+                    "gravity": "center"
+                })
+        else:
+            footer_contents.append({
+                "type": "button",
+                "style": "primary",
+                "color": "#e57373",
+                "action": {
+                    "type": "postback",
+                    "label": "ยกเลิกการจอง",
+                    "data": f"action=cancel_booking&id={b['id']}"
+                }
+            })
         bubbles.append({
             "type": "bubble",
             "hero": {
@@ -58,18 +107,7 @@ def booking_history_flex(bookings):
                 "type": "box",
                 "layout": "vertical",
                 "spacing": "sm",
-                "contents": [
-                    {
-                        "type": "button",
-                        "style": "primary",
-                        "color": "#e57373",
-                        "action": {
-                            "type": "postback",
-                            "label": "ยกเลิกการจอง",
-                            "data": f"action=cancel_booking&id={b['id']}"
-                        }
-                    }
-                ]
+                "contents": footer_contents
             }
         })
     return {
