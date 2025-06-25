@@ -3,6 +3,9 @@ from routes.auth import auth_bp
 from routes.booking import booking_bp
 from routes.linebot import linebot_bp
 from routes.payments import payment_bp  # <--- เพิ่มตรงนี้
+from routes.upload_slip_ai import ai_upload_bp
+
+app.register_blueprint(ai_upload_bp)
 
 from config import SECRET_KEY
 
