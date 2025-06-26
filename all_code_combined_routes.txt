@@ -1,0 +1,601 @@
+
+=== /Users/kamontat.s/Desktop/work/routes/auth.py ===
+from flask import Blueprint, render_template, redirect, url_for, session, request
+from core.line_utils import get_line_auth_url
+from config import LINE_REDIRECT_URI, LINE_CLIENT_ID, LINE_CLIENT_SECRET  # <--- แนะนำ
+import requests
+
+auth_bp = Blueprint("auth", __name__)
+
+@auth_bp.route("/")
+def index():
+    line_login_url = get_line_auth_url()
+    return render_template("login.html", line_login_url=line_login_url)
+
+@auth_bp.route("/logout")
+def logout():
+    session.clear()
+    return redirect(url_for("auth.index"))
+
+@auth_bp.route("/line_login_callback")
+def line_login_callback():
+    code = request.args.get("code")
+    state = request.args.get("state") or ""
+    room = None
+    if state.startswith("ROOM_"):
+        room = state[5:]
+    if not code:
+        return "Missing LINE login code", 400
+    token_res = requests.post(
+        "https://api.line.me/oauth2/v2.1/token",
+        headers={'Content-Type': 'application/x-www-form-urlencoded'},
+        data={
+            "grant_type": "authorization_code",
+            "code": code,
+            "redirect_uri": LINE_REDIRECT_URI,
+            "client_id": LINE_CLIENT_ID,
+            "client_secret": LINE_CLIENT_SECRET
+        }
+    )
+    if token_res.status_code != 200:
+        return "LINE token exchange failed: " + token_res.text, 400
+
+    access_token = token_res.json().get("access_token")
+    if not access_token:
+        return "No access token from LINE", 400
+
+    userinfo = requests.get(
+        "https://api.line.me/v2/profile",
+        headers={"Authorization": f"Bearer {access_token}"}
+    ).json()
+    session["line_profile"] = userinfo
+    return redirect(url_for("booking.datepicker", room=room) if room else url_for("booking.datepicker"))
+=== /Users/kamontat.s/Desktop/work/routes/payments.py ===
+import os
+import re
+import sqlite3
+from flask import Blueprint, request, jsonify, render_template
+from werkzeug.utils import secure_filename
+from PIL import Image
+import pytesseract
+from core.line_utils import push_flex_line
+from core.flex_receipt import build_receipt_flex
+payment_bp = Blueprint('payment', __name__)
+UPLOAD_FOLDER = "uploads"
+PROMPTPAY_PHONE = "0986619426"
+DATABASE = "booking.db"
+
+def normalize(text):
+    th_digits = "๐๑๒๓๔๕๖๗๘๙"
+    ar_digits = "0123456789"
+    text = text or ""
+    for i, th in enumerate(th_digits):
+        text = text.replace(th, ar_digits[i])
+    return re.sub(r'\D', '', text)
+
+def get_booking_amount_and_path(booking_id):
+    conn = sqlite3.connect(DATABASE)
+    cur = conn.cursor()
+    # ถ้าไม่มี column amount/payment_proof ให้ลบหรือคอมเมนต์ field เหล่านี้
+    cur.execute("SELECT amount, payment_proof FROM bookings WHERE id=?", (booking_id,))
+    row = cur.fetchone()
+    conn.close()
+    if row:
+        return row[0], row[1]
+    return None, None
+
+def update_booking_payment(booking_id, status, slip_path):
+    conn = sqlite3.connect(DATABASE)
+    cur = conn.cursor()
+    cur.execute(
+        "UPDATE bookings SET payment_status=?, payment_proof=? WHERE id=?",
+        (status, slip_path, booking_id)
+    )
+    conn.commit()
+    conn.close()
+
+def is_slip_valid(ocr_text, phone, amount):
+    norm_text = normalize(ocr_text)
+    norm_phone = normalize(phone)[-4:]
+    has_phone = norm_phone in norm_text
+    if amount:  # ถ้ามี column amount
+        str_amount = str(int(amount))
+        has_amount = str_amount in norm_text or "{:.2f}".format(amount).replace('.', '') in norm_text
+        return has_phone and has_amount
+    else:
+        return has_phone
+
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in {'png', 'jpg', 'jpeg', 'bmp', 'gif'}
+
+@payment_bp.route("/upload_slip", methods=["GET", "POST"])
+def upload_slip():
+    if request.method == "GET":
+        booking_id = request.args.get("booking_id")
+        if not booking_id:
+            return "ไม่พบรหัสการจอง", 400
+        return render_template('upload_slip.html', booking_id=booking_id)
+    else:
+        booking_id = request.form.get("booking_id")
+        file = request.files.get("slip")
+
+        if not file or not booking_id:
+            return jsonify({"success": False, "msg": "ข้อมูลไม่ครบ"}), 400
+
+        if not allowed_file(file.filename):
+            return jsonify({"success": False, "msg": "ไฟล์ต้องเป็นรูปภาพเท่านั้น"}), 400
+
+        filename = secure_filename(file.filename)
+        os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+        save_path = os.path.join(UPLOAD_FOLDER, f"{booking_id}_{filename}")
+        file.save(save_path)
+
+        amount, old_slip = get_booking_amount_and_path(booking_id)
+
+        # OCR
+        try:
+            img = Image.open(save_path)
+            ocr_text = pytesseract.image_to_string(img, lang='tha+eng')
+        except Exception as e:
+            return jsonify({"success": False, "msg": f"OCR error: {e}"}), 500
+
+        if is_slip_valid(ocr_text, PROMPTPAY_PHONE, amount):
+            update_booking_payment(booking_id, 'paid', save_path)
+
+            # *** เพิ่มส่วนนี้: ดึงข้อมูล booking เพื่อสร้างใบเสร็จ ***
+            conn = sqlite3.connect(DATABASE)
+            cur = conn.cursor()
+            cur.execute("SELECT room, date, time, line_user_id FROM bookings WHERE id=?", (booking_id,))
+            row = cur.fetchone()
+            conn.close()
+            if row:
+                room, date, time, line_user_id = row
+                price = amount or 0  # ถ้ามี amount
+                flex = build_receipt_flex(room, date, time, price, booking_id)
+                push_flex_line(line_user_id, flex)  # ส่ง Flex Receipt ไปที่ LINE OA
+
+            return render_template('upload_success.html')
+        else:
+            return jsonify({"success": False, "msg": "สลิปไม่ถูกต้อง กรุณาตรวจสอบและอัปโหลดใหม่", "ocr_text": ocr_text}), 400
+=== /Users/kamontat.s/Desktop/work/routes/.DS_Store ===
+
+=== /Users/kamontat.s/Desktop/work/routes/linebot.py ===
+from flask import Blueprint, request, abort
+from linebot import LineBotApi, WebhookHandler
+from linebot.exceptions import InvalidSignatureError
+from linebot.models import MessageEvent, TextMessage, FlexSendMessage, TextSendMessage, PostbackEvent, ImageSendMessage
+from core.flex_utils import build_room_booking_flex, booking_history_flex
+from core.flex_receipt import build_receipt_flex
+from config import LINE_CHANNEL_ACCESS_TOKEN, LINE_CHANNEL_SECRET, BASE_URL, DATABASE
+import sqlite3
+from routes.booking import send_qr_to_user
+
+linebot_bp = Blueprint("linebot", __name__)
+line_bot_api = LineBotApi(LINE_CHANNEL_ACCESS_TOKEN)
+handler = WebhookHandler(LINE_CHANNEL_SECRET)
+
+@handler.add(MessageEvent, message=TextMessage)
+def handle_message(event):
+    user_message = event.message.text.strip().lower()
+    line_user_id = event.source.user_id
+    print("DEBUG: user_id from LINE OA chat =", line_user_id)
+
+    if "จองห้อง" in user_message:
+        rooms = [
+            {
+                "room": "A101",
+                "price": 100,
+                "img": "https://www.executivecentre.com/_next/image/?url=%2F_next%2Fstatic%2Fmedia%2FplanOverview-mr-meetingRoom.1f2225da.jpg&w=3840&q=75",
+                "size": "Small",
+                "url": f"{BASE_URL}/booking/datepicker?room=A101",
+                "bg": "#9C8E7Ecc"
+            },
+            {
+                "room": "B202",
+                "price": 200,
+                "img": "https://patreeda.com/wp-content/uploads/2020/12/cover-nologo-3.jpg",
+                "size": "Medium",
+                "url": f"{BASE_URL}/booking/datepicker?room=B202",
+                "bg": "#1e1e1ecc"
+            }
+        ]
+        flex_msg = build_room_booking_flex(rooms)
+        line_bot_api.reply_message(event.reply_token, FlexSendMessage(alt_text="จองห้อง", contents=flex_msg))
+        return
+
+    if "ติดต่อ" in user_message:
+        line_bot_api.reply_message(
+            event.reply_token,
+            TextSendMessage(text="คุณสามารถติดต่อผู้ดูแลได้ตลอด 24 ชั่วโมงที่เบอร์ 094-973-2665\n\n ")
+        )
+        return
+
+    if "ประวัติการจอง" in user_message:
+        print("user_id:", line_user_id)
+        conn = sqlite3.connect(DATABASE)
+        c = conn.cursor()
+        c.execute("SELECT id, room, date, time, payment_status FROM bookings WHERE line_user_id=?", (line_user_id,))
+        rows = c.fetchall()
+        print("DB rows:", rows)
+        bookings = [{"id": r, "room": d, "date": t, "time": u, "payment_status": s, "user_id": line_user_id} for r, d, t, u, s in rows]
+        conn.close()
+        if bookings:
+            flex = booking_history_flex(bookings)
+            line_bot_api.reply_message(
+                event.reply_token,
+                FlexSendMessage(alt_text="ประวัติการจองของคุณ", contents=flex)
+            )
+        else:
+            line_bot_api.reply_message(
+                event.reply_token,
+                TextSendMessage(text="ไม่พบประวัติการจองห้องของคุณ")
+            )
+        return
+
+    if event.message.text == "ขอ QR":
+        booking_id = 2  # ตัวอย่าง: ดึง booking_id ตาม context จริง
+        user_id = event.source.user_id
+        qr_url = f"https://8958-2405-9800-b660-dee1-15ef-b331-5bf4-4f49.ngrok-free.app/booking/get_qr_image/{booking_id}"
+
+        image_message = ImageSendMessage(
+            original_content_url=qr_url,
+            preview_image_url=qr_url
+        )
+        line_bot_api.reply_message(event.reply_token, image_message)
+    # Default/else case
+    line_bot_api.reply_message(
+        event.reply_token,
+        TextSendMessage(
+            text="นี่คือระบบตอบกลับอัตโนมัติ\n\n"
+                 "คุณสามารถพิมพ์ จองห้อง เพื่อใช้งานระบบได้\n\n"
+                 "หากต้องการติดต่อผู้ดูแลระบบ สามารถพิมพ์ ติดต่อ ได้เลย "
+        )
+    )
+
+@handler.add(PostbackEvent)
+def handle_postback(event):
+    data = event.postback.data
+    if data == "msg=wait_qr":
+        line_bot_api.reply_message(
+            event.reply_token,
+            TextSendMessage(text="สามารถขอ QR ได้ 1 ชม. ก่อนถึงเวลาเข้าห้อง")
+        )
+        return
+    if data.startswith("action=cancel_booking"):
+        params = dict(x.split("=") for x in data.split("&"))
+        booking_id = params.get("id")
+        if not booking_id:
+            line_bot_api.reply_message(
+                event.reply_token,
+                TextSendMessage(text="เกิดข้อผิดพลาด ไม่พบ ID การจอง")
+            )
+            return
+        line_user_id = event.source.user_id
+        conn = sqlite3.connect(DATABASE)
+        c = conn.cursor()
+        c.execute("SELECT * FROM bookings WHERE id=? AND line_user_id=?", (booking_id, line_user_id))
+        booking = c.fetchone()
+        if booking:
+            c.execute("DELETE FROM bookings WHERE id=?", (booking_id,))
+            conn.commit()
+            msg = "ยกเลิกการจองสำเร็จ"
+        else:
+            msg = "ไม่พบข้อมูลการจองนี้ หรือคุณไม่มีสิทธิ์ยกเลิก"
+        conn.close()
+        line_bot_api.reply_message(
+            event.reply_token,
+            TextSendMessage(text=msg)
+        )
+    if data.startswith("show_qr|"):
+        booking_id = int(data.split("|")[1])
+        user_id = event.source.user_id
+        send_qr_to_user(user_id, booking_id)
+
+@linebot_bp.route("/callback", methods=['POST'])
+def callback():
+    signature = request.headers.get("X-Line-Signature")
+    body = request.get_data(as_text=True)
+    try:
+        handler.handle(body, signature)
+    except InvalidSignatureError:
+        abort(400)
+    return "OK", 200
+=== /Users/kamontat.s/Desktop/work/routes/booking.py ===
+from flask import Blueprint, render_template, session, request, redirect, jsonify, send_file
+from core.line_utils import push_flex_line, get_line_auth_url
+from core.flex_receipt import build_receipt_flex
+from core.utils import format_thai_date
+from config import DATABASE, PRICE_PER_ROOM
+import sqlite3
+import os
+import qrcode
+import io
+from linebot import LineBotApi
+from linebot.models import ImageSendMessage
+
+
+booking_bp = Blueprint("booking", __name__)
+
+def send_qr_to_user(line_user_id, booking_id):
+    qr_url = f"https://8958-2405-9800-b660-dee1-15ef-b331-5bf4-4f49.ngrok-free.app/booking/get_qr_image/{booking_id}"
+    access_token = os.environ.get("LINE_CHANNEL_ACCESS_TOKEN", 'fallback-token')
+    print("DEBUG: LINE TOKEN", access_token)
+    line_bot_api = LineBotApi(access_token)
+    image_message = ImageSendMessage(
+        original_content_url=qr_url,
+        preview_image_url=qr_url
+    )
+    try:
+        line_bot_api.push_message(line_user_id, image_message)
+    except Exception as e:
+        print("Error sending QR to LINE user:", e)
+
+@booking_bp.route('/datepicker')
+def datepicker():
+    room = request.args.get("room")
+    if not room or room == "None":
+        return "กรุณาเข้าผ่านลิงก์ที่ถูกต้อง (room parameter หาย)", 400
+    if "line_profile" not in session:
+        login_url = get_line_auth_url(room)
+        return redirect(login_url)
+    return render_template('custom_datepicker.html', room=room, profile=session["line_profile"])
+
+@booking_bp.route("/book", methods=["POST"])
+def book():
+    print("--- /book called ---")
+    print("SESSION:", session)
+    try:
+        data = request.get_json()
+        print("DATA:", data)
+        if "line_profile" not in session:
+            print("NO line_profile in session")
+            return jsonify({"success": False, "msg": "กรุณาเข้าสู่ระบบด้วย LINE"}), 400
+        user_id = session["line_profile"]["userId"]
+        room = data.get("room")
+        if not room or room == "None":
+            return jsonify({"success": False, "msg": "ไม่ได้เลือกห้อง"}), 400
+        date = data.get("date")
+        time = data.get("time")
+        print(f"room: {room}, date: {date}, time: {time}")
+        if not room or not date or not time:
+            print("ข้อมูลไม่ครบ")
+            return jsonify({"success": False, "msg": "ข้อมูลไม่ครบ กรุณาเลือกห้อง วัน และเวลา"}), 400
+
+        conn = sqlite3.connect(DATABASE)
+        c = conn.cursor()
+        c.execute(
+            "SELECT * FROM bookings WHERE room=? AND date=? AND time=?",
+            (room, date, time)
+        )
+        if c.fetchone():
+            conn.close()
+            print("ห้องนี้ถูกจองในวันและเวลาดังกล่าวแล้ว")
+            return jsonify({"success": False, "msg": "ห้องนี้ถูกจองในวันและเวลาดังกล่าวแล้ว"}), 400
+        c.execute(
+            "INSERT INTO bookings (line_user_id, room, date, time, payment_status) VALUES (?, ?, ?, ?, ?)",
+            (user_id, room, date, time, 'pending')
+        )
+        booking_id = c.lastrowid
+        conn.commit()
+        conn.close()
+        
+
+
+        flex_wait_slip = {
+        "type": "bubble",
+        "body": {
+            "type": "box",
+            "layout": "vertical",
+            "contents": [
+                {"type": "text", "text": f"จองห้อง {room} สำเร็จ", "weight": "bold", "size": "lg"},
+                {"type": "text", "text": "กรุณาอัปโหลดสลิปโอนเงินเพื่อยืนยันการจอง", "wrap": True, "margin": "md"},
+            ]
+        },
+        "footer": {
+            "type": "box",
+            "layout": "vertical",
+            "spacing": "sm",
+            "contents": [
+                {
+                    "type": "button",
+                    "action": {
+                        "type": "uri",
+                        "label": "อัปโหลดสลิป",
+                        "uri": f"https://8958-2405-9800-b660-dee1-15ef-b331-5bf4-4f49.ngrok-free.app/payment/upload_slip?booking_id={booking_id}"
+                    },
+                    "style": "primary"
+                }
+            ]
+        }
+    }
+        send_qr_to_user(user_id, booking_id)
+        # ไม่ต้อง build_receipt_flex
+        push_flex_line(user_id, flex_wait_slip)
+
+        print(f"จองห้อง {room} สำเร็จ! แจ้งรออัปโหลดสลิป")
+        return jsonify({"success": True, "msg": f"คุณกำลังจองห้อง {room} สำเร็จ!"})
+    except Exception as e:
+        print("Exception in /book:", e)
+        import traceback; traceback.print_exc()
+        return jsonify({"success": False, "msg": "เกิดข้อผิดพลาด (server)"}), 500
+
+@booking_bp.route("/mybookings")
+def mybookings():
+    print("SESSION:", session)
+    if "line_profile" not in session:
+        print("NO line_profile in session")
+        return jsonify([])
+    user_id = session["line_profile"]["userId"]
+    conn = sqlite3.connect(DATABASE)
+    c = conn.cursor()
+    c.execute(
+        "SELECT id, room, date, time FROM bookings WHERE line_user_id=? ORDER BY date DESC, time DESC",
+        (user_id,)
+    )
+    rows = c.fetchall()
+    conn.close()
+    bookings = [{"id": r, "room": d, "date": t, "time": u} for r, d, t, u in rows]
+    return jsonify(bookings)
+
+@booking_bp.route("/cancel_booking", methods=["POST"])
+def cancel_booking():
+    try:
+        data = request.get_json()
+        booking_id = data.get("booking_id")
+        if not booking_id:
+            return jsonify({"success": False, "msg": "ไม่พบข้อมูล booking_id"}), 400
+
+        if "line_profile" not in session:
+            return jsonify({"success": False, "msg": "กรุณาเข้าสู่ระบบ"}), 400
+        user_id = session["line_profile"]["userId"]
+
+        conn = sqlite3.connect(DATABASE)
+        c = conn.cursor()
+        c.execute(
+            "SELECT * FROM bookings WHERE id=? AND line_user_id=?",
+            (booking_id, user_id)
+        )
+        booking = c.fetchone()
+        if not booking:
+            conn.close()
+            return jsonify({"success": False, "msg": "ไม่พบข้อมูลการจองนี้"}), 404
+
+        c.execute("DELETE FROM bookings WHERE id=?", (booking_id,))
+        conn.commit()
+        conn.close()
+        return jsonify({"success": True, "msg": "ยกเลิกการจองสำเร็จ"})
+    except Exception as e:
+        print("Exception in /cancel_booking:", e)
+        import traceback; traceback.print_exc()
+        return jsonify({"success": False, "msg": "เกิดข้อผิดพลาด (server)"}), 500
+
+@booking_bp.route("/your_booking_page")
+def your_booking_page():
+    if "line_profile" not in session:
+        return redirect(get_line_auth_url())
+
+@booking_bp.route("/get_qr/<int:booking_id>")
+def get_qr(booking_id):
+    print(f"DEBUG: get_qr called, booking_id={booking_id}")
+    print(f"DEBUG: DATABASE PATH = {DATABASE}")
+    user_id = request.args.get("user_id")
+    print(f"DEBUG: user_id query param = {user_id}")
+    conn = sqlite3.connect(DATABASE)
+    c = conn.cursor()
+    c.execute("SELECT line_user_id, room, date, time, payment_status FROM bookings WHERE id=?", (booking_id,))
+    row = c.fetchone()
+    print(f"DEBUG: DB select row = {row}")
+    conn.close()
+    if not row:
+        print("DEBUG: Booking not found 404")
+        return "ไม่พบ booking", 404
+    line_user_id, room, date, time, payment_status = row
+    if payment_status != "paid":
+        return "ยังไม่ได้ชำระเงิน", 403
+    if user_id and user_id != line_user_id:
+        return "คุณไม่มีสิทธิ์เข้าถึง QR นี้", 403
+    # สร้าง QR code (อาจใส่ข้อมูล booking_id, room, date, time)
+    qr_data = f"BOOKING:{booking_id}|ROOM:{room}|DATE:{date}|TIME:{time}"
+    img = qrcode.make(qr_data)
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    buf.seek(0)
+    return send_file(buf, mimetype="image/png")
+
+@booking_bp.route("/get_qr_image/<int:booking_id>")
+def get_qr_image(booking_id):
+    # ดึงข้อมูล booking เพื่อ encode รายละเอียดเหมือน get_qr
+    conn = sqlite3.connect(DATABASE)
+    c = conn.cursor()
+    c.execute("SELECT room, date, time FROM bookings WHERE id=?", (booking_id,))
+    row = c.fetchone()
+    conn.close()
+    if row:
+        room, date, time = row
+        qr_data = f"BOOKING:{booking_id}|ROOM:{room}|DATE:{date}|TIME:{time}"
+    else:
+        qr_data = f"BOOKING:{booking_id}"
+    img = qrcode.make(qr_data)
+    buf = io.BytesIO()
+    img.save(buf, format='PNG')
+    buf.seek(0)
+    return send_file(buf, mimetype='image/png')
+=== /Users/kamontat.s/Desktop/work/routes/upload_slip.py ===
+from flask import Blueprint, request, jsonify
+from core.slip_check import extract_text_from_slip, check_slip_valid
+
+upload_bp = Blueprint("upload", __name__)
+
+@upload_bp.route("/upload_slip", methods=["POST"])
+def upload_slip():
+    file = request.files["slip"]
+    # สมมติบันทึกไฟล์ไว้ที่ path นี้
+    save_path = f"uploads/{file.filename}"
+    file.save(save_path)
+    # ข้อมูลที่ควรตรวจสอบ
+    expected_account = "1234567890"  # เลขบัญชี
+    expected_amount = 1000.00        # จำนวนเงินที่รอ booking
+    # OCR
+    text = extract_text_from_slip(save_path)
+    is_valid = check_slip_valid(text, expected_account, expected_amount)
+    if is_valid:
+        # อัปเดต booking ในฐานข้อมูลเป็น paid
+        # db.update_payment_status(...)
+        return jsonify({"success": True, "message": "ตรวจสลิปผ่าน อัปเดตสถานะเรียบร้อย!"})
+    else:
+        return jsonify({"success": False, "message": "ไม่พบข้อมูลที่ถูกต้องในสลิป กรุณาตรวจสอบอีกครั้ง"})
+=== /Users/kamontat.s/Desktop/work/routes/__init__.py ===
+
+=== /Users/kamontat.s/Desktop/work/routes/test.py ===
+@app.route("/test_push")
+def test_push():
+    user_id = "U2aad7860092b75cbd0faf218b516b644"  # เปลี่ยนเป็น userId ที่จะทดสอบ
+    push_flex_line(user_id, flex_json)
+    return "Pushed!"
+=== /Users/kamontat.s/Desktop/work/routes/admin.py ===
+from flask import Blueprint, render_template
+from core.payments import get_all_pending_payments
+
+admin_bp = Blueprint("admin", __name__)
+
+@admin_bp.route("/admin/payments")
+def admin_payments():
+    payments = get_all_pending_payments()
+    return render_template("admin_payments.html", payments=payments)
+=== /Users/kamontat.s/Desktop/work/routes/upload_slip_ai.py ===
+from flask import Blueprint, request, jsonify
+from core.slip_ai_check import predict_slip
+import os
+
+ai_upload_bp = Blueprint("ai_upload", __name__)
+
+UPLOAD_FOLDER = "uploads"
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
+@ai_upload_bp.route("/upload_slip_ai", methods=["POST"])
+def upload_slip_ai():
+    file = request.files.get("slip")
+    if not file:
+        return jsonify({"success": False, "msg": "ไม่พบไฟล์สลิป"}), 400
+    filename = file.filename
+    save_path = os.path.join(UPLOAD_FOLDER, filename)
+    file.save(save_path)
+    try:
+        pred, prob = predict_slip(save_path)
+    except Exception as e:
+        return jsonify({"success": False, "msg": f"ทำนายสลิปไม่สำเร็จ: {e}"}), 500
+    if pred == "real_slips" and prob > 0.8:
+        return jsonify({"success": True, "ai_result": "ผ่าน", "score": prob})
+    else:
+        return jsonify({"success": False, "ai_result": "อาจเป็นสลิปปลอม", "score": prob})
+=== /Users/kamontat.s/Desktop/work/routes/__pycache__/upload_slip_ai.cpython-311.pyc ===
+
+=== /Users/kamontat.s/Desktop/work/routes/__pycache__/booking.cpython-311.pyc ===
+
+=== /Users/kamontat.s/Desktop/work/routes/__pycache__/linebot.cpython-311.pyc ===
+
+=== /Users/kamontat.s/Desktop/work/routes/__pycache__/auth.cpython-311.pyc ===
+
+=== /Users/kamontat.s/Desktop/work/routes/__pycache__/payments.cpython-311.pyc ===
+
+=== /Users/kamontat.s/Desktop/work/routes/__pycache__/__init__.cpython-311.pyc ===
