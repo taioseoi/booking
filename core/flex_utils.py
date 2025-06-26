@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta, timezone
 from core.utils import now_thai
+from config import BASE_URL
 
 def booking_history_flex(bookings, line_user_id=None):
     bubbles = []
@@ -14,7 +15,7 @@ def booking_history_flex(bookings, line_user_id=None):
         user_id = b.get("user_id", line_user_id)
         footer_contents = []
         if b.get("payment_status") == "paid":
-            qr_url = f"https://8958-2405-9800-b660-dee1-15ef-b331-5bf4-4f49.ngrok-free.app/booking/get_qr/{b['id']}?user_id={user_id}"
+            qr_url = f"{BASE_URL}/booking/get_qr/{b['id']}?user_id={user_id}"
             if can_show_qr:
                 # ปุ่มเขียว ใช้งานได้
                 footer_contents.append({

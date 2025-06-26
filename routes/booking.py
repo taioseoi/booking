@@ -1,8 +1,8 @@
 from flask import Blueprint, render_template, session, request, redirect, jsonify, send_file
 from core.line_utils import push_flex_line, get_line_auth_url
 from core.flex_receipt import build_receipt_flex
-from core.utils import format_thai_date, generate_expiring_qr_data
-from config import DATABASE, PRICE_PER_ROOM
+from core.utils import format_thai_date
+from config import DATABASE, PRICE_PER_ROOM,BASE_URL, generate_expiring_qr_data
 import sqlite3
 import os
 import qrcode
@@ -23,7 +23,7 @@ def save_qr_image(booking_id, qr_data):
 
 
 def send_qr_to_user(line_user_id, booking_id):
-    qr_url = f"https://8958-2405-9800-b660-dee1-15ef-b331-5bf4-4f49.ngrok-free.app/static/qr_images/{booking_id}.png"
+    qr_url = f"{BASE_URL}/static/qr_images/{booking_id}.png"
     access_token = os.environ.get("LINE_CHANNEL_ACCESS_TOKEN", 'fallback-token')
     print("DEBUG: LINE TOKEN", access_token)
     line_bot_api = LineBotApi(access_token)
@@ -109,7 +109,7 @@ def book():
                     "action": {
                         "type": "uri",
                         "label": "อัปโหลดสลิป",
-                        "uri": f"https://8958-2405-9800-b660-dee1-15ef-b331-5bf4-4f49.ngrok-free.app/payment/upload_slip?booking_id={booking_id}"
+                        "uri": f"{BASE_URL}/payment/upload_slip?booking_id={booking_id}"
                     },
                     "style": "primary"
                 }

@@ -73,7 +73,7 @@ def handle_message(event):
     if event.message.text == "ขอ QR":
         booking_id = 2  # ตัวอย่าง: ดึง booking_id ตาม context จริง
         user_id = event.source.user_id
-        qr_url = f"https://8958-2405-9800-b660-dee1-15ef-b331-5bf4-4f49.ngrok-free.app/booking/get_qr_image/{booking_id}"
+        qr_url = f"{BASE_URL}/booking/get_qr_image/{booking_id}"
 
         image_message = ImageSendMessage(
             original_content_url=qr_url,
