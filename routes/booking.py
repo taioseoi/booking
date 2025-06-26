@@ -2,7 +2,7 @@ from flask import Blueprint, render_template, session, request, redirect, jsonif
 from core.line_utils import push_flex_line, get_line_auth_url
 from core.flex_receipt import build_receipt_flex
 from core.utils import format_thai_date
-from config import DATABASE, PRICE_PER_ROOM,BASE_URL, generate_expiring_qr_data
+from config import DATABASE, PRICE_PER_ROOM,BASE_URL
 import sqlite3
 import os
 import qrcode
