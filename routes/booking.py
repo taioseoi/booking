@@ -1,7 +1,7 @@
 from flask import Blueprint, render_template, session, request, redirect, jsonify, send_file
 from core.line_utils import push_flex_line, get_line_auth_url
 from core.flex_receipt import build_receipt_flex
-from core.utils import format_thai_date
+from core.utils import format_thai_date, generate_expiring_qr_data
 from config import DATABASE, PRICE_PER_ROOM
 import sqlite3
 import os
@@ -10,11 +10,20 @@ import io
 from linebot import LineBotApi
 from linebot.models import ImageSendMessage
 
-
+QR_DIR = os.path.join("static", "qr_images")
 booking_bp = Blueprint("booking", __name__)
 
+def save_qr_image(booking_id, qr_data):
+    if not os.path.exists(QR_DIR):
+        os.makedirs(QR_DIR)
+    path = os.path.join(QR_DIR, f"{booking_id}.png")
+    img = qrcode.make(qr_data)
+    img.save(path)
+    return path
+
+
 def send_qr_to_user(line_user_id, booking_id):
-    qr_url = f"https://8958-2405-9800-b660-dee1-15ef-b331-5bf4-4f49.ngrok-free.app/booking/get_qr_image/{booking_id}"
+    qr_url = f"https://8958-2405-9800-b660-dee1-15ef-b331-5bf4-4f49.ngrok-free.app/static/qr_images/{booking_id}.png"
     access_token = os.environ.get("LINE_CHANNEL_ACCESS_TOKEN", 'fallback-token')
     print("DEBUG: LINE TOKEN", access_token)
     line_bot_api = LineBotApi(access_token)
@@ -74,6 +83,8 @@ def book():
         )
         booking_id = c.lastrowid
         conn.commit()
+        qr_data = f"BOOKING:{booking_id}|ROOM:{room}|DATE:{date}|TIME:{time}"
+        save_qr_image(booking_id, qr_data)
         conn.close()
         
 
@@ -192,7 +203,7 @@ def get_qr(booking_id):
     if user_id and user_id != line_user_id:
         return "คุณไม่มีสิทธิ์เข้าถึง QR นี้", 403
     # สร้าง QR code (อาจใส่ข้อมูล booking_id, room, date, time)
-    qr_data = f"BOOKING:{booking_id}|ROOM:{room}|DATE:{date}|TIME:{time}"
+    qr_data = generate_expiring_qr_data(booking_id, room, date, time) 
     img = qrcode.make(qr_data)
     buf = io.BytesIO()
     img.save(buf, format="PNG")
@@ -209,11 +220,12 @@ def get_qr_image(booking_id):
     conn.close()
     if row:
         room, date, time = row
-        qr_data = f"BOOKING:{booking_id}|ROOM:{room}|DATE:{date}|TIME:{time}"
+        qr_data = generate_expiring_qr_data(booking_id, room, date, time)
     else:
         qr_data = f"BOOKING:{booking_id}"
     img = qrcode.make(qr_data)
     buf = io.BytesIO()
-    img.save(buf, format='PNG')
+    img.save(buf, format="PNG")
     buf.seek(0)
-    return send_file(buf, mimetype='image/png')
+    return send_file(buf, mimetype="image/png")
+

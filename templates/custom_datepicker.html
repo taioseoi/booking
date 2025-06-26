@@ -17,13 +17,6 @@
         min-height: 100vh;
         margin: 0;
         font-family: 'IBM Plex Sans Thai Looped', sans-serif;
-        .logo {
-          font-family: 'date_range', cursive;
-          font-size: 2.2em;
-          color: #8b7355;
-          letter-spacing: 2px;
-          margin-bottom: 18px;
-        }
         /* สำหรับ fallback เฉยๆ */
         background-color: #f7f1e5;
         display: flex;
@@ -31,6 +24,13 @@
         justify-content: center;
       
       }
+      .logo {
+          font-family: 'date_range', cursive;
+          font-size: 2.2em;
+          color: #8b7355;
+          letter-spacing: 2px;
+          margin-bottom: 18px;
+        }
       .calendar-wrapper {
         display: flex;
         flex-direction: column;
@@ -335,6 +335,25 @@
   if (!userId) {
     window.location.href = "/logout"; // หรือ redirect ไป login
   }
+  
+function cancelBooking(bookingId) {
+  fetch("/booking/cancel_booking", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ booking_id: bookingId })
+  })
+    .then(res => res.json())
+    .then(res => {
+      console.log(res);
+      if (res.success) {
+        alert("ยกเลิกการจองสำเร็จ");
+        window.location.reload();
+      } else {
+        alert(res.msg);
+      }
+    });
+}
+
 window.addEventListener('DOMContentLoaded', function() {
   const calendarEl = document.getElementById('calendar');
   const overlayEl = document.getElementById('calendar-overlay');
@@ -557,23 +576,7 @@ window.addEventListener('DOMContentLoaded', function() {
   calendarEl.style.display = 'none';
   updateBookBtn();
   
-  function cancelBooking(bookingId) {
-  fetch("/cancel_booking", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ booking_id: bookingId })
-  })
-    .then(res => res.json())
-    .then(res => {
-      console.log(res);
-      if (res.success) {
-        alert("ยกเลิกการจองสำเร็จ");
-        window.location.reload();
-      } else {
-        alert(res.msg);
-      }
-    });
-}
+
   // --- Timepicker ---
   const popup = document.getElementById('timepicker-popup');
   const timeList = document.getElementById('time-list');

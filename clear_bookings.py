@@ -1,16 +1,13 @@
 import sqlite3
+from config import DATABASE
 
-DATABASE = "booking.db"  # หรือ path ฐานข้อมูลจริงของคุณ
+def clear_bookings():
+    conn = sqlite3.connect(DATABASE)
+    c = conn.cursor()
+    c.execute("DELETE FROM bookings")
+    conn.commit()
+    conn.close()
+    print("Bookings cleared!")
 
-conn = sqlite3.connect(DATABASE)
-cur = conn.cursor()
-
-# ถ้าอยากลบ booking ทั้งหมด
-cur.execute("DELETE FROM bookings")
-
-# หรือถ้าอยากเหลือ booking ล่าสุดอันเดียว (ลบอันอื่นออก)
-# cur.execute("DELETE FROM bookings WHERE id NOT IN (SELECT id FROM bookings ORDER BY id DESC LIMIT 1)")
-
-conn.commit()
-conn.close()
-print("Cleared all bookings (หรือเหลือแค่ booking ล่าสุด) สำเร็จ!")
+if __name__ == "__main__":
+    clear_bookings()

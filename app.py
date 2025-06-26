@@ -5,7 +5,7 @@ from routes.linebot import linebot_bp
 from routes.payments import payment_bp
 from routes.upload_slip_ai import ai_upload_bp
 from config import SECRET_KEY
-
+from routes.admin import admin_bp
 
 def create_app():
     app = Flask(__name__)
@@ -17,12 +17,13 @@ def create_app():
     app.register_blueprint(linebot_bp, url_prefix='/linebot')
     app.register_blueprint(payment_bp, url_prefix='/payment')
     app.register_blueprint(ai_upload_bp, url_prefix='/ai_upload')
+    app.register_blueprint(admin_bp)
     for rule in app.url_map.iter_rules():
         print(rule)
 
     @app.route('/')
-    def index():
-        return "Welcome to the Booking System!"
+    def hello():
+        return "Hello from Render!"
 
     return app
 if __name__ == "__main__":
